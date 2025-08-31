@@ -1,0 +1,19 @@
+{
+  "name": "ip-resolve",
+  "version": "1.0.0",
+  "description": "Node.js app for IP geolocation resolution",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "",
+  "license": "MIT"
+}
