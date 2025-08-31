@@ -1,10 +1,30 @@
 const express = require('express');
-const axios = require('axios');
+const maxmind = require('maxmind');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DB_PATH = path.join(__dirname, 'data', 'GeoLite2-City.mmdb');
+
+let cityLookup = null;
 
 app.use(express.json());
+
+async function initializeDatabase() {
+    try {
+        if (!fs.existsSync(DB_PATH)) {
+            console.error('GeoLite2 database not found. Run: node download-db.js');
+            process.exit(1);
+        }
+        
+        cityLookup = await maxmind.open(DB_PATH);
+        console.log('GeoLite2 database loaded successfully');
+    } catch (error) {
+        console.error('Failed to load GeoLite2 database:', error.message);
+        process.exit(1);
+    }
+}
 
 function getClientIp(req) {
     return req.headers['cf-connecting-ip'] ||
@@ -44,29 +64,37 @@ function getCloudflareGeoInfo(req) {
     };
 }
 
-async function getIpInfo(ip) {
-    try {
-        const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`);
-        const data = response.data;
-        
-        if (data.status === 'fail') {
-            throw new Error(data.message || 'IP lookup failed');
-        }
-
-        return {
-            country_code: data.countryCode,
-            country_name: data.country,
-            city: data.city,
-            latitude: data.lat,
-            longitude: data.lon,
-            IPv4: data.query,
-            eu: data.countryCode && ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'].includes(data.countryCode) ? "1" : "0",
-            region: data.region || "00",
-            timezone: data.timezone
-        };
-    } catch (error) {
-        throw new Error(`Failed to resolve IP: ${error.message}`);
+function getLocalIpInfo(ip) {
+    if (!cityLookup) {
+        throw new Error('Database not initialized');
     }
+    
+    const result = cityLookup.get(ip);
+    if (!result) {
+        throw new Error('IP address not found in database');
+    }
+    
+    const euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
+    
+    const countryCode = result.country?.iso_code || null;
+    const countryName = result.country?.names?.en || null;
+    const cityName = result.city?.names?.en || null;
+    const latitude = result.location?.latitude || null;
+    const longitude = result.location?.longitude || null;
+    const timezone = result.location?.time_zone || null;
+    const region = result.subdivisions?.[0]?.iso_code || "00";
+    
+    return {
+        country_code: countryCode,
+        country_name: countryName,
+        city: cityName,
+        latitude: latitude,
+        longitude: longitude,
+        IPv4: ip,
+        eu: countryCode && euCountries.includes(countryCode) ? "1" : "0",
+        region: region,
+        timezone: timezone
+    };
 }
 
 app.get('/ip', async (req, res) => {
@@ -82,7 +110,7 @@ app.get('/ip', async (req, res) => {
             return res.json(cfGeoInfo);
         }
 
-        const ipInfo = await getIpInfo(clientIp);
+        const ipInfo = getLocalIpInfo(clientIp);
         res.json(ipInfo);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -98,7 +126,7 @@ app.get('/ip/:address', async (req, res) => {
             return res.status(400).json({ error: 'Invalid IP address format' });
         }
 
-        const ipInfo = await getIpInfo(ipAddress);
+        const ipInfo = getLocalIpInfo(ipAddress);
         res.json(ipInfo);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -109,6 +137,15 @@ app.get('/health', (req, res) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
+async function startServer() {
+    await initializeDatabase();
+    
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}
+
+startServer().catch(error => {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
 });

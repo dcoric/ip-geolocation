@@ -5,11 +5,13 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "download-db": "node download-db.js",
+    "setup": "npm install && npm run download-db"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "axios": "^1.6.0"
+    "maxmind": "^4.3.8"
   },
   "engines": {
     "node": ">=18"
