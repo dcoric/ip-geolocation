@@ -12,14 +12,18 @@ A Node.js application that provides IP geolocation data with support for Cloudfl
 ## API Endpoints
 
 ### GET /ip
+
 Returns geolocation data for the client's IP address.
+
 - Uses Cloudflare headers if available
 - Falls back to local MaxMind database lookup
 
 ### GET /ip/{IP_ADDRESS}
+
 Returns geolocation data for the specified IP address using local database.
 
 ### GET /health
+
 Health check endpoint.
 
 ## Response Format
@@ -67,7 +71,7 @@ npm run download-db
 npm start
 ```
 
-The server will start on port 3000 by default.
+The server will start on port 7755 by default.
 
 ## Docker Deployment
 
@@ -93,6 +97,7 @@ docker-compose down
 ```
 
 The docker-compose configuration includes:
+
 - **Health checks**: Monitors service availability
 - **Auto-restart**: Restarts on failure
 - **Volume mounting**: Persists database across container restarts
@@ -107,7 +112,7 @@ docker build -t ip-resolve .
 # Run the container
 docker run -d \
   --name ip-resolve \
-  -p 3000:3000 \
+  -p 7755:7755 \
   -v $(pwd)/data:/app/data \
   --restart unless-stopped \
   ip-resolve
@@ -118,21 +123,29 @@ docker run -d \
 The `docker-compose.yml` file includes production-ready settings:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   ip-resolve:
     build: .
     ports:
-      - "3000:3000"
+      - "7755:7755"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=7755
     restart: unless-stopped
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:7755/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -167,7 +180,7 @@ crontab -e
 
 ### Environment Variables
 
-- `PORT`: Server port (default: 3000)
+- `PORT`: Server port (default: 7755)
 
 ### Cloudflare Headers
 
