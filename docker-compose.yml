@@ -33,6 +33,7 @@ services:
       context: .
       dockerfile: Dockerfile.cron
     restart: unless-stopped
+    init: true
     volumes:
       - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
