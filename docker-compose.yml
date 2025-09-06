@@ -27,3 +27,19 @@ services:
       start_period: 40s
     labels:
       - "com.docker.compose.project=ip-resolve"
+
+  db-updater:
+    build:
+      context: .
+      dockerfile: Dockerfile.cron
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+    environment:
+      - TZ=UTC
+    depends_on:
+      - ip-resolve
+    labels:
+      - "com.docker.compose.project=ip-resolve"

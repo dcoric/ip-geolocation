@@ -162,7 +162,7 @@ services:
 The GeoLite2 database is updated weekly by MaxMind. To get the latest version:
 
 ```bash
-# Update the database
+# Update the database (requires Node.js)
 npm run download-db
 
 # Restart the server to load new database
@@ -171,7 +171,59 @@ npm start
 
 ### Automated Updates
 
-You can set up a cron job to automatically update the database:
+#### Option 1: Docker Compose with Built-in Cron (Recommended)
+
+The Docker Compose setup includes an automatic database updater service:
+
+```bash
+# Start both the service and auto-updater
+docker-compose up -d
+
+# Check if both services are running
+docker-compose ps
+
+# View updater logs
+docker-compose logs -f db-updater
+
+# View cron update logs
+docker-compose exec db-updater cat /app/data/cron-update.log
+```
+
+The `db-updater` service features:
+- **Automatic weekly updates** every Tuesday at 2 AM UTC
+- **Service restart** after database updates
+- **Comprehensive logging** to `data/cron-update.log`
+- **Error handling** and file corruption protection
+- **No manual intervention required**
+
+#### Option 2: Standalone Script (No Node.js Required)
+
+For non-Docker environments or manual control:
+
+```bash
+# Make the script executable (one time)
+chmod +x update-db.sh
+
+# Run the update manually
+./update-db.sh
+
+# Set up automated updates via crontab
+crontab -e
+
+# Add this line to update weekly on Tuesdays at 2 AM
+0 2 * * 2 cd /path/to/ip-resolve && ./update-db.sh
+```
+
+The standalone script (`update-db.sh`) features:
+- No Node.js dependency (uses curl/wget)
+- Automatic service restart detection (PM2, Docker Compose, systemd)
+- Error handling and logging to `update-db.log`
+- File corruption protection
+- Redirect following for download URLs
+
+#### Option 3: Node.js Script (Legacy)
+
+If you have Node.js available:
 
 ```bash
 # Edit crontab
@@ -209,6 +261,7 @@ When running behind Cloudflare with IP Geolocation enabled, the following header
 - `npm run setup`: Full setup (install + download database)
 - `./start.sh`: Startup script with dependency check
 - `./start-prod.sh`: Production startup script (assumes dependencies installed)
+- `./update-db.sh`: Standalone database update script (no Node.js required)
 
 ### File Structure
 
@@ -216,11 +269,13 @@ When running behind Cloudflare with IP Geolocation enabled, the following header
 ip-resolve/
 ├── server.js          # Main application server (with auto-download)
 ├── download-db.js     # Database download script
+├── update-db.sh       # Standalone database update script (no Node.js required)
 ├── start.sh           # Startup script with dependency check
 ├── start-prod.sh      # Production startup script
 ├── package.json       # Node.js dependencies and scripts
-├── docker-compose.yml # Docker Compose configuration
-├── Dockerfile         # Docker configuration
+├── docker-compose.yml # Docker Compose configuration (includes cron service)
+├── Dockerfile         # Docker configuration for main service
+├── Dockerfile.cron    # Docker configuration for cron updater service
 ├── .dockerignore      # Docker ignore file
 ├── .gitignore         # Git ignore file
 ├── data/              # MaxMind database storage (auto-created)
