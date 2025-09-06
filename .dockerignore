@@ -7,3 +7,6 @@ README.md
 .nyc_output
 coverage
 .DS_Store
+.vscode
+*.log
+data/

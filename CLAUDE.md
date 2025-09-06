@@ -9,9 +9,13 @@ This is a Node.js IP geolocation service that provides offline IP lookups using 
 ## Commands
 
 ### Development
-- `npm start` or `npm run dev` - Start the server (port 7755)
+- `npm run dev` - Start development server with ts-node (port 7755)
+- `npm run build` - Compile TypeScript to JavaScript
+- `npm start` - Build and start production server (port 7755)
+- `npm run typecheck` - Run TypeScript type checking without compilation
 - `npm run download-db` - Download/update MaxMind GeoLite2 database
 - `npm run setup` - Full setup (install dependencies + download database)
+- `npm run clean` - Remove compiled JavaScript files
 
 ### Production
 - `./start.sh` - Startup script with dependency checking
@@ -26,12 +30,17 @@ This is a Node.js IP geolocation service that provides offline IP lookups using 
 
 ### Core Components
 
-1. **server.js** - Main application with three key subsystems:
-   - **Database initialization** (lines 58-70): Auto-downloads GeoLite2 database on first run
-   - **IP detection** (lines 72-82): Multi-source client IP extraction (Cloudflare, X-Forwarded-For, etc.)
+1. **src/server.ts** - Main TypeScript application with three key subsystems:
+   - **Database initialization**: Auto-downloads GeoLite2 database on first run
+   - **IP detection**: Multi-source client IP extraction (Cloudflare, X-Forwarded-For, etc.)
    - **Geolocation resolution**: Cloudflare headers take priority over local MaxMind lookups
 
-2. **download-db.js** - Standalone database downloader with redirect handling
+2. **src/download-db.ts** - Standalone database downloader with redirect handling
+
+3. **TypeScript Configuration**:
+   - **tsconfig.json**: Strict TypeScript configuration with ES2020 target
+   - **dist/**: Compiled JavaScript output directory
+   - **Type safety**: Full type coverage for MaxMind API and Express routes
 
 ### Key Design Patterns
 

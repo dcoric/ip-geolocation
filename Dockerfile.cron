@@ -16,7 +16,7 @@ COPY update-db.sh /app/update-db.sh
 RUN chmod +x /app/update-db.sh
 
 # Create a Docker-aware update script
-RUN cat > /app/docker-update-db.sh << 'EOF'
+COPY <<EOF /app/docker-update-db.sh
 #!/bin/bash
 set -e
 
@@ -35,25 +35,25 @@ DB_FILE="/app/data/GeoLite2-City.mmdb"
 mkdir -p /app/data
 
 # Download with curl
-if curl -sL -o "$TEMP_FILE" "$DB_URL"; then
+if curl -sL -o "\$TEMP_FILE" "\$DB_URL"; then
     # Verify download
-    if [ ! -s "$TEMP_FILE" ]; then
+    if [ ! -s "\$TEMP_FILE" ]; then
         log "Error: Downloaded file is empty"
-        rm -f "$TEMP_FILE"
+        rm -f "\$TEMP_FILE"
         exit 1
     fi
     
-    file_size=$(stat -c%s "$TEMP_FILE" 2>/dev/null || echo "0")
-    if [ "$file_size" -lt 10485760 ]; then  # Less than 10MB is suspicious
-        log "Error: Downloaded file too small ($(( file_size / 1024 / 1024 )) MB)"
-        rm -f "$TEMP_FILE"
+    file_size=\$(stat -c%s "\$TEMP_FILE" 2>/dev/null || echo "0")
+    if [ "\$file_size" -lt 10485760 ]; then  # Less than 10MB is suspicious
+        log "Error: Downloaded file too small (\$(( file_size / 1024 / 1024 )) MB)"
+        rm -f "\$TEMP_FILE"
         exit 1
     fi
     
     # Replace old database
-    mv "$TEMP_FILE" "$DB_FILE"
-    chmod 644 "$DB_FILE"
-    log "Database updated successfully ($(( file_size / 1024 / 1024 )) MB)"
+    mv "\$TEMP_FILE" "\$DB_FILE"
+    chmod 644 "\$DB_FILE"
+    log "Database updated successfully (\$(( file_size / 1024 / 1024 )) MB)"
     
     # Restart the main service
     if docker-compose -f /app/docker-compose.yml restart ip-resolve; then
@@ -63,7 +63,7 @@ if curl -sL -o "$TEMP_FILE" "$DB_URL"; then
     fi
 else
     log "Error: Failed to download database"
-    rm -f "$TEMP_FILE"
+    rm -f "\$TEMP_FILE"
     exit 1
 fi
 
@@ -76,7 +76,7 @@ RUN chmod +x /app/docker-update-db.sh
 RUN echo "0 2 * * 2 /app/docker-update-db.sh >> /app/data/cron-update.log 2>&1" > /etc/crontabs/root
 
 # Create startup script
-RUN cat > /app/start-cron.sh << 'EOF'
+COPY <<EOF /app/start-cron.sh
 #!/bin/bash
 echo "Starting cron service for database updates"
 echo "Cron job: Weekly updates on Tuesdays at 2 AM UTC"
