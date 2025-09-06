@@ -51,24 +51,32 @@ Health check endpoint.
 git clone <repository-url>
 cd ip-resolve
 
-# Install dependencies and download database
-npm run setup
-
-# Start the server
-npm start
-```
-
-### Manual Setup
-
-```bash
 # Install dependencies
 npm install
 
-# Download MaxMind GeoLite2 database
-npm run download-db
-
-# Start the server
+# Start the server (database downloads automatically on first run)
 npm start
+```
+
+### Production Setup (No npm required after initial setup)
+
+For production servers where you prefer not to have npm available:
+
+```bash
+# One-time setup with npm
+npm install
+
+# Use production startup script
+./start-prod.sh
+```
+
+### Manual Database Download (Optional)
+
+The database downloads automatically when needed, but you can pre-download it:
+
+```bash
+# Download MaxMind GeoLite2 database manually
+npm run download-db
 ```
 
 The server will start on port 7755 by default.
@@ -80,10 +88,7 @@ The server will start on port 7755 by default.
 For production deployments, use the provided `docker-compose.yml`:
 
 ```bash
-# Download the database first
-npm run download-db
-
-# Start the service
+# Start the service (database downloads automatically if needed)
 docker-compose up -d
 
 # Check status
@@ -198,17 +203,21 @@ When running behind Cloudflare with IP Geolocation enabled, the following header
 
 ### Available Scripts
 
-- `npm start`: Start the production server
-- `npm run dev`: Start the development server
-- `npm run download-db`: Download/update the MaxMind database
+- `npm start`: Start the production server (auto-downloads database if needed)
+- `npm run dev`: Start the development server (auto-downloads database if needed)
+- `npm run download-db`: Download/update the MaxMind database manually
 - `npm run setup`: Full setup (install + download database)
+- `./start.sh`: Startup script with dependency check
+- `./start-prod.sh`: Production startup script (assumes dependencies installed)
 
 ### File Structure
 
 ```
 ip-resolve/
-├── server.js          # Main application server
+├── server.js          # Main application server (with auto-download)
 ├── download-db.js     # Database download script
+├── start.sh           # Startup script with dependency check
+├── start-prod.sh      # Production startup script
 ├── package.json       # Node.js dependencies and scripts
 ├── docker-compose.yml # Docker Compose configuration
 ├── Dockerfile         # Docker configuration
@@ -234,12 +243,16 @@ This project uses MaxMind's GeoLite2 database, which is free and updated weekly.
 
 ## Troubleshooting
 
-### Database Not Found Error
+### Database Issues
 
-If you get "GeoLite2 database not found" error:
+The database now downloads automatically on first run. If you experience issues:
 
 ```bash
+# Manual download
 npm run download-db
+
+# Or restart the server (it will auto-download if missing)
+npm start
 ```
 
 ### Permission Errors
@@ -252,11 +265,14 @@ chmod 755 .
 
 ### Docker Issues
 
-If the Docker build fails, ensure the database is downloaded first:
+The database downloads automatically when the container starts. If issues occur:
 
 ```bash
-npm run download-db
+# Rebuild the image
 docker build -t ip-resolve .
+
+# Check container logs
+docker logs <container-name>
 ```
 
 ## License

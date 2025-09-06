@@ -2,26 +2,69 @@ const express = require("express");
 const maxmind = require("maxmind");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 7755;
 const DB_PATH = path.join(__dirname, "data", "GeoLite2-City.mmdb");
+const DB_URL = 'https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb';
 
 let cityLookup = null;
 
 app.use(express.json());
 
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    https.get(url, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve();
+      });
+    }).on('error', reject);
+    file.on('error', reject);
+  });
+}
+
+async function downloadDatabase() {
+  console.log('GeoLite2 database not found. Downloading...');
+  
+  const dbDir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+    console.log('Created data directory');
+  }
+
+  try {
+    await downloadFile(DB_URL, DB_PATH);
+    console.log('Database downloaded successfully!');
+    
+    const stats = fs.statSync(DB_PATH);
+    console.log('File size:', (stats.size / (1024 * 1024)).toFixed(2), 'MB');
+  } catch (error) {
+    console.error('Failed to download database:', error.message);
+    throw error;
+  }
+}
+
 async function initializeDatabase() {
   try {
     if (!fs.existsSync(DB_PATH)) {
-      console.error("GeoLite2 database not found. Run: node download-db.js");
-      process.exit(1);
+      await downloadDatabase();
     }
 
     cityLookup = await maxmind.open(DB_PATH);
     console.log("GeoLite2 database loaded successfully");
   } catch (error) {
-    console.error("Failed to load GeoLite2 database:", error.message);
+    console.error("Failed to initialize GeoLite2 database:", error.message);
     process.exit(1);
   }
 }
