@@ -39,8 +39,9 @@ This is a Node.js IP geolocation service that provides offline IP lookups using 
 
 3. **TypeScript Configuration**:
    - **tsconfig.json**: Strict TypeScript configuration with ES2020 target
-   - **dist/**: Compiled JavaScript output directory
+   - **dist/**: Compiled JavaScript output directory (excluded from git)
    - **Type safety**: Full type coverage for MaxMind API and Express routes
+   - **Node.js**: Requires Node.js 22+ (latest LTS)
 
 ### Key Design Patterns
 

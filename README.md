@@ -267,17 +267,20 @@ When running behind Cloudflare with IP Geolocation enabled, the following header
 
 ```
 ip-resolve/
-├── server.js          # Main application server (with auto-download)
-├── download-db.js     # Database download script
+├── src/
+│   ├── server.ts      # Main TypeScript application server
+│   └── download-db.ts # TypeScript database download script
 ├── update-db.sh       # Standalone database update script (no Node.js required)
 ├── start.sh           # Startup script with dependency check
 ├── start-prod.sh      # Production startup script
 ├── package.json       # Node.js dependencies and scripts
+├── tsconfig.json      # TypeScript configuration
 ├── docker-compose.yml # Docker Compose configuration (includes cron service)
 ├── Dockerfile         # Docker configuration for main service
 ├── Dockerfile.cron    # Docker configuration for cron updater service
 ├── .dockerignore      # Docker ignore file
 ├── .gitignore         # Git ignore file
+├── dist/              # Compiled JavaScript output (gitignored)
 ├── data/              # MaxMind database storage (auto-created)
 └── README.md          # This file
 ```

@@ -17,7 +17,7 @@
     "maxmind": "^4.3.8"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "author": "",
   "license": "MIT",
