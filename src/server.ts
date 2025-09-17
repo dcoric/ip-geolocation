@@ -4,12 +4,20 @@ import * as fs from "fs";
 import * as path from "path";
 import * as https from "https";
 
-const app = express();
+export const app = express();
 const PORT = parseInt(process.env.PORT || '7755', 10);
 const DB_PATH = path.join(__dirname, "..", "data", "GeoLite2-City.mmdb");
 const DB_URL = 'https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb';
 
 let cityLookup: maxmind.Reader<maxmind.CityResponse> | null = null;
+
+export function setCityLookup(reader: maxmind.Reader<maxmind.CityResponse> | null): void {
+  cityLookup = reader;
+}
+
+export function resetCityLookup(): void {
+  cityLookup = null;
+}
 
 app.use(express.json());
 
@@ -87,7 +95,7 @@ async function initializeDatabase(): Promise<void> {
   }
 }
 
-function getClientIp(req: Request): string | null {
+export function getClientIp(req: Request): string | null {
   const forwardedFor = req.headers["x-forwarded-for"];
   const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
   
@@ -103,7 +111,7 @@ function getClientIp(req: Request): string | null {
   );
 }
 
-function getCloudflareGeoInfo(req: Request): GeoLocationInfo | null {
+export function getCloudflareGeoInfo(req: Request): GeoLocationInfo | null {
   const cfCountry = req.headers["cf-ipcountry"] as string | undefined;
   const cfCity = req.headers["cf-ipcity"] as string | undefined;
   const cfRegion = req.headers["cf-region"] as string | undefined;
@@ -135,7 +143,7 @@ function getCloudflareGeoInfo(req: Request): GeoLocationInfo | null {
   };
 }
 
-function getLocalIpInfo(ip: string): GeoLocationInfo {
+export function getLocalIpInfo(ip: string): GeoLocationInfo {
   if (!cityLookup) {
     throw new Error("Database not initialized");
   }
@@ -172,7 +180,7 @@ function getLocalIpInfo(ip: string): GeoLocationInfo {
   };
 }
 
-app.get("/ip", async (req: Request, res: Response): Promise<void> => {
+export async function handleGetIp(req: Request, res: Response): Promise<void> {
   try {
     const clientIp = getClientIp(req);
 
@@ -192,9 +200,9 @@ app.get("/ip", async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
-});
+}
 
-app.get("/ip/:address", async (req: Request, res: Response): Promise<void> => {
+export async function handleGetIpAddress(req: Request, res: Response): Promise<void> {
   try {
     const ipAddress = req.params.address;
     
@@ -215,13 +223,17 @@ app.get("/ip/:address", async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
-});
+}
 
-app.get("/health", (req: Request, res: Response) => {
+export function handleHealth(_req: Request, res: Response): void {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
-});
+}
 
-async function startServer(): Promise<void> {
+app.get("/ip", handleGetIp);
+app.get("/ip/:address", handleGetIpAddress);
+app.get("/health", handleHealth);
+
+export async function startServer(): Promise<void> {
   await initializeDatabase();
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -229,7 +241,9 @@ async function startServer(): Promise<void> {
   });
 }
 
-startServer().catch((error) => {
-  console.error("Failed to start server:", (error as Error).message);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  startServer().catch((error) => {
+    console.error("Failed to start server:", (error as Error).message);
+    process.exit(1);
+  });
+}
