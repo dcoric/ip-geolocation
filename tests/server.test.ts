@@ -4,6 +4,7 @@ import type { CityResponse, Reader } from 'maxmind';
 import {
   getClientIp,
   getCloudflareGeoInfo,
+  getLocalIpInfo,
   setCityLookup,
   resetCityLookup,
   handleGetIp,
@@ -92,6 +93,24 @@ describe('getCloudflareGeoInfo', () => {
   });
 });
 
+describe('getLocalIpInfo', () => {
+  afterEach(() => {
+    resetCityLookup();
+  });
+
+  it('throws when database has not been initialized', () => {
+    expect(() => getLocalIpInfo('8.8.8.8')).toThrow('Database not initialized');
+  });
+
+  it('throws when lookup cannot find the requested IP', () => {
+    setCityLookup({
+      get: () => undefined,
+    } as unknown as Reader<CityResponse>);
+
+    expect(() => getLocalIpInfo('8.8.8.8')).toThrow('IP address not found in database');
+  });
+});
+
 describe('HTTP handlers', () => {
   afterEach(() => {
     resetCityLookup();
@@ -176,6 +195,52 @@ describe('HTTP handlers', () => {
     });
   });
 
+  it('uses local database lookup when Cloudflare data is not present', async () => {
+    const cityResponse: Partial<CityResponse> = {
+      country: {
+        iso_code: 'FR',
+        names: { en: 'France' },
+      },
+      city: {
+        names: { en: 'Paris' },
+      },
+      location: {
+        latitude: 48.8566,
+        longitude: 2.3522,
+        time_zone: 'Europe/Paris',
+      },
+      subdivisions: [
+        {
+          iso_code: 'IDF',
+        },
+      ],
+    };
+
+    setCityLookup(mockCityLookup(cityResponse));
+
+    const res = createMockResponse();
+    const req = createRequest({
+      headers: {
+        'x-forwarded-for': '203.0.113.10',
+      },
+    });
+
+    await handleGetIp(req, res);
+
+    expect(res.statusCode ?? 200).toBe(200);
+    expect(res.json).toHaveBeenCalledWith({
+      country_code: 'FR',
+      country_name: 'France',
+      city: 'Paris',
+      latitude: 48.8566,
+      longitude: 2.3522,
+      IPv4: '203.0.113.10',
+      eu: '1',
+      region: 'IDF',
+      timezone: 'Europe/Paris',
+    });
+  });
+
   it('returns 400 when IP format invalid', async () => {
     const res = createMockResponse();
     const req = createRequest({ params: { address: 'not-an-ip' } });
@@ -184,6 +249,30 @@ describe('HTTP handlers', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid IP address format' });
+  });
+
+  it('returns 400 when IP parameter is missing', async () => {
+    const res = createMockResponse();
+    const req = createRequest({ params: {} });
+
+    await handleGetIpAddress(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'IP address parameter is required' });
+  });
+
+  it('returns 500 when database lookup throws for direct IP request', async () => {
+    const res = createMockResponse();
+    const req = createRequest({ params: { address: '8.8.4.4' } });
+
+    setCityLookup({
+      get: () => undefined,
+    } as unknown as Reader<CityResponse>);
+
+    await handleGetIpAddress(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'IP address not found in database' });
   });
 
   it('prefers Cloudflare geolocation data when available', async () => {
@@ -215,6 +304,20 @@ describe('HTTP handlers', () => {
       region: 'MD',
       timezone: 'Europe/Madrid',
     });
+  });
+
+  it('returns 500 when local lookup throws for inferred client IP', async () => {
+    const res = createMockResponse();
+    const req = createRequest({
+      headers: {
+        'x-forwarded-for': '198.51.100.55',
+      },
+    });
+
+    await handleGetIp(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Database not initialized' });
   });
 
   it('returns 400 when IP missing from request and no headers available', async () => {

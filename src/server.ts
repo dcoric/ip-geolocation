@@ -95,6 +95,13 @@ async function initializeDatabase(): Promise<void> {
   }
 }
 
+// Expose internal helpers for targeted unit tests.
+export const __testables = {
+  downloadFile,
+  downloadDatabase,
+  initializeDatabase,
+};
+
 export function getClientIp(req: Request): string | null {
   const forwardedFor = req.headers["x-forwarded-for"];
   const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
