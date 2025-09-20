@@ -2,8 +2,8 @@ type MockOptions = {
   responseFactory?: () => {
     statusCode: number;
     statusMessage?: string;
-    headers?: Record<string, string>;
-    pipe?: jest.Mock;
+    headers: Record<string, string>;
+    pipe: jest.Mock;
   };
   existsSyncImpl?: (filePath: string) => boolean;
   listenImpl?: jest.Mock;
@@ -20,25 +20,35 @@ function setupModuleMocks(options: MockOptions = {}) {
       return { close: jest.fn() };
     });
 
-  const express = Object.assign(() => ({
-    use: useMock,
-    get: getMock,
-    listen: listenMock,
-  }), {
-    json: jest.fn(() => jest.fn()),
-  });
+  const express = Object.assign(
+    () => ({
+      use: useMock,
+      get: getMock,
+      listen: listenMock,
+    }),
+    {
+      json: jest.fn(() => jest.fn()),
+    },
+  );
 
-  const stream = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+  const streamInstances: Array<{ on: jest.Mock; close: jest.Mock }> = [];
+
+  const createWriteStream = jest.fn(() => {
+    const instance: { on: jest.Mock; close: jest.Mock } = {
+      on: jest.fn(),
+      close: jest.fn(),
+    };
+
+    instance.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
       if (event === 'finish') {
         handler();
       }
-      return stream as any;
-    }),
-    close: jest.fn(),
-  };
+      return instance;
+    });
 
-  const createWriteStream = jest.fn(() => stream);
+    streamInstances.push(instance);
+    return instance;
+  });
   const existsSync = options.existsSyncImpl
     ? jest.fn((filePath: string) => options.existsSyncImpl?.(filePath))
     : jest.fn(() => false);
@@ -46,32 +56,34 @@ function setupModuleMocks(options: MockOptions = {}) {
   const statSync = jest.fn(() => ({ size: 1024 * 1024 }));
 
   const requestOn = jest.fn();
-  const request = {
-    on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
-      requestOn(event, handler);
-      return request;
-    }),
-  };
-
   const httpsGet = jest.fn(
-    (url: string, callback: (response: { statusCode: number; statusMessage?: string; headers: Record<string, string>; pipe: jest.Mock }) => void),
-  ) => {
-    const response = options.responseFactory
-      ? options.responseFactory()
-      : {
-          statusCode: 200,
-          statusMessage: 'OK',
-          headers: {},
-          pipe: jest.fn(),
-        };
+    (url: string, callback: (response: { statusCode: number; statusMessage?: string; headers: Record<string, string>; pipe: jest.Mock }) => void) => {
+      const response = options.responseFactory
+        ? options.responseFactory()
+        : {
+            statusCode: 200,
+            statusMessage: 'OK',
+            headers: {},
+            pipe: jest.fn(),
+          };
 
-    callback(response);
+      callback(response);
 
-    return request;
-  };
+      const request: { on: jest.Mock } = {
+        on: jest.fn(),
+      };
+
+      request.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+        requestOn(event, handler);
+        return request;
+      });
+
+      return request;
+    },
+  );
 
   const openMock =
-    options.openImpl || jest.fn(() => Promise.resolve({ get: jest.fn(() => ({})) }));
+    options.openImpl || jest.fn(async (_path: string) => ({ get: jest.fn(() => ({})) }));
 
   jest.doMock('express', () => express);
   jest.doMock('fs', () => ({
@@ -93,7 +105,7 @@ function setupModuleMocks(options: MockOptions = {}) {
     statSync,
     httpsGet,
     openMock,
-    stream,
+    streamInstances,
     requestOn,
   };
 }
@@ -106,6 +118,7 @@ describe('server initialization helpers', () => {
   });
 
   it('downloadFile resolves on successful HTTP response', async () => {
+    jest.resetModules();
     setupModuleMocks();
     const server = await import('../src/server');
 
@@ -117,6 +130,7 @@ describe('server initialization helpers', () => {
   });
 
   it('downloadFile rejects when redirect location header missing', async () => {
+    jest.resetModules();
     setupModuleMocks({
       responseFactory: () => ({
         statusCode: 302,
@@ -133,6 +147,7 @@ describe('server initialization helpers', () => {
   });
 
   it('downloadFile rejects on non-200 HTTP responses', async () => {
+    jest.resetModules();
     setupModuleMocks({
       responseFactory: () => ({
         statusCode: 404,
@@ -149,6 +164,7 @@ describe('server initialization helpers', () => {
   });
 
   it('downloadDatabase creates directory and downloads file when missing', async () => {
+    jest.resetModules();
     const mocks = setupModuleMocks();
     const server = await import('../src/server');
 
@@ -160,6 +176,7 @@ describe('server initialization helpers', () => {
   });
 
   it('initializeDatabase loads existing database without download', async () => {
+    jest.resetModules();
     const mocks = setupModuleMocks({
       existsSyncImpl: (filePath) => filePath.includes('GeoLite2-City.mmdb'),
     });
@@ -172,9 +189,8 @@ describe('server initialization helpers', () => {
   });
 
   it('initializeDatabase downloads database when file missing', async () => {
-    const mocks = setupModuleMocks({
-      existsSyncImpl: (filePath) => filePath.endsWith('data'),
-    });
+    jest.resetModules();
+    const mocks = setupModuleMocks();
     const server = await import('../src/server');
 
     await server.__testables.initializeDatabase();
@@ -184,11 +200,14 @@ describe('server initialization helpers', () => {
   });
 
   it('initializeDatabase exits process on failure', async () => {
+    jest.resetModules();
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     setupModuleMocks({
       existsSyncImpl: () => true,
-      openImpl: jest.fn(() => Promise.reject(new Error('boom'))),
+      openImpl: jest.fn(async (_path: string) => {
+        throw new Error('boom');
+      }),
     });
     const server = await import('../src/server');
 
@@ -202,6 +221,7 @@ describe('server initialization helpers', () => {
   });
 
   it('startServer initializes database then listens', async () => {
+    jest.resetModules();
     const mocks = setupModuleMocks({
       existsSyncImpl: (filePath) => filePath.includes('GeoLite2-City.mmdb'),
     });
@@ -218,26 +238,33 @@ describe('server initialization helpers', () => {
 
   it('auto-start logs and exits when startServer rejects outside test env', async () => {
     const originalEnv = process.env.NODE_ENV;
+    jest.resetModules();
     process.env.NODE_ENV = 'production';
 
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    setupModuleMocks({
-      existsSyncImpl: () => true,
-      listenImpl: jest.fn(() => {
-        throw new Error('listen failure');
-      }) as unknown as Mock,
-    });
+    try {
+      const listenFailMock = jest.fn(
+        (_port: number, _host: string, _callback?: () => void) => {
+          throw new Error('listen failure');
+        },
+      );
 
-    await import('../src/server');
-    await Promise.resolve();
+      setupModuleMocks({
+        existsSyncImpl: () => true,
+        listenImpl: listenFailMock,
+      });
 
-    expect(errorSpy).toHaveBeenCalledWith('Failed to start server:', 'listen failure');
-    expect(exitSpy).toHaveBeenCalledWith(1);
+      await import('../src/server');
+      await new Promise((resolve) => setImmediate(resolve));
 
-    process.env.NODE_ENV = originalEnv;
-    exitSpy.mockRestore();
-    errorSpy.mockRestore();
+      expect(errorSpy).toHaveBeenCalledWith('Failed to start server:', 'listen failure');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 });

@@ -198,20 +198,25 @@ describe('HTTP handlers', () => {
   it('uses local database lookup when Cloudflare data is not present', async () => {
     const cityResponse: Partial<CityResponse> = {
       country: {
+        geoname_id: 3017382,
         iso_code: 'FR',
         names: { en: 'France' },
       },
       city: {
+        geoname_id: 2988507,
         names: { en: 'Paris' },
       },
       location: {
+        accuracy_radius: 5,
         latitude: 48.8566,
         longitude: 2.3522,
         time_zone: 'Europe/Paris',
       },
       subdivisions: [
         {
+          geoname_id: 3012874,
           iso_code: 'IDF',
+          names: { en: 'Ile-de-France' },
         },
       ],
     };
