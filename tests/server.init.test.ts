@@ -22,6 +22,7 @@ function setupModuleMocks(options: MockOptions = {}) {
 
   const express = Object.assign(
     () => ({
+      set: jest.fn(),
       use: useMock,
       get: getMock,
       listen: listenMock,

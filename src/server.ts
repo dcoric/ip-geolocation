@@ -1,10 +1,12 @@
 import express, { Request, Response } from "express";
 import * as maxmind from "maxmind";
+import * as ipaddr from "ipaddr.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as https from "https";
 
 export const app = express();
+app.set("trust proxy", true);
 const PORT = parseInt(process.env.PORT || '7755', 10);
 const DB_PATH = path.join(__dirname, "..", "data", "GeoLite2-City.mmdb");
 const DB_URL = 'https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb';
@@ -102,20 +104,72 @@ export const __testables = {
   initializeDatabase,
 };
 
+function firstHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] || null;
+  }
+  return value || null;
+}
+
+function stripPort(rawIp: string): string {
+  const bracketMatch = rawIp.match(/^\[(.+)\](?::\d+)?$/);
+  if (bracketMatch) {
+    return bracketMatch[1] ?? rawIp;
+  }
+  if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(rawIp)) {
+    return rawIp.split(":")[0] ?? rawIp;
+  }
+  return rawIp;
+}
+
+function normalizeIp(rawIp: string | null | undefined): string | null {
+  if (!rawIp) return null;
+  const cleaned = stripPort(rawIp);
+  try {
+    const parsed = ipaddr.parse(cleaned);
+    if (parsed.kind() === "ipv6") {
+      const ipv6 = parsed as ipaddr.IPv6;
+      if (ipv6.isIPv4MappedAddress()) {
+        return ipv6.toIPv4Address().toString();
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isLoopback(ip: string): boolean {
+  try {
+    return ipaddr.parse(ip).range() === "loopback";
+  } catch {
+    return false;
+  }
+}
+
 export function getClientIp(req: Request): string | null {
-  const forwardedFor = req.headers["x-forwarded-for"];
-  const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-  
-  return (
-    req.headers["cf-connecting-ip"] as string ||
-    forwardedIp?.split(",")[0] ||
-    req.headers["x-real-ip"] as string ||
-    (req.connection?.remoteAddress) ||
-    (req.socket?.remoteAddress) ||
-    ((req.connection as any)?.socket?.remoteAddress) ||
-    req.ip ||
-    null
-  );
+  const forwardedFor = firstHeaderValue(req.headers["x-forwarded-for"]);
+  const forwardedIp = forwardedFor?.split(",")[0]?.trim() || null;
+
+  const candidates = [
+    firstHeaderValue(req.headers["cf-connecting-ip"]),
+    req.ips?.[0] || null,
+    forwardedIp,
+    req.ip || null,
+    firstHeaderValue(req.headers["x-real-ip"]),
+    req.connection?.remoteAddress || null,
+    req.socket?.remoteAddress || null,
+    (req.connection as any)?.socket?.remoteAddress || null,
+  ];
+
+  for (const rawIp of candidates) {
+    const normalized = normalizeIp(rawIp);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
 }
 
 export function getCloudflareGeoInfo(req: Request): GeoLocationInfo | null {
@@ -191,7 +245,7 @@ export async function handleGetIp(req: Request, res: Response): Promise<void> {
   try {
     const clientIp = getClientIp(req);
 
-    if (!clientIp || clientIp === "::1" || clientIp === "127.0.0.1") {
+    if (!clientIp || isLoopback(clientIp)) {
       res.status(400).json({ error: "Unable to determine client IP address" });
       return;
     }
@@ -211,16 +265,16 @@ export async function handleGetIp(req: Request, res: Response): Promise<void> {
 
 export async function handleGetIpAddress(req: Request, res: Response): Promise<void> {
   try {
-    const ipAddress = req.params.address;
-    
-    if (!ipAddress) {
+    const rawAddress = req.params.address;
+
+    if (!rawAddress) {
       res.status(400).json({ error: "IP address parameter is required" });
       return;
     }
 
-    const ipRegex =
-      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    if (!ipRegex.test(ipAddress)) {
+    const ipAddress = normalizeIp(rawAddress);
+
+    if (!ipAddress) {
       res.status(400).json({ error: "Invalid IP address format" });
       return;
     }
