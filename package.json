@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "express": "^4.22.1",
-    "ipaddr.js": "^2.2.0",
+    "ipaddr.js": "^2.3.0",
     "maxmind": "^4.3.29"
   },
   "engines": {
